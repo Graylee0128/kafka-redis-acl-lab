@@ -9,6 +9,8 @@
 #   consumer×2  同一個 consumer group 讀 Kafka，寫進 Redis（只有讀取權限）
 #   web         權限申請面板（加分題），唯一持有 Kafka / Redis admin 憑證的元件
 #   redis       Redis，以 ACL 檔控管帳號
+#   kafbat-ui    （選用，--profile ui）Kafka 管理 UI，http://localhost:8081
+#   redisinsight （選用，--profile ui）Redis 管理 UI，http://localhost:5540
 #
 # 啟動順序（depends_on）：
 #   kafka ──healthy──► kafka-init ──exit 0──┬──► producer
@@ -22,6 +24,8 @@
 #
 # 檢視解析結果時用 docker compose config --services / --volumes；
 # 不要直接跑 docker compose config，它會把 .env 的密碼全部展開印出來。
+#
+# 相關說明：QA.md「讀懂執行狀態」與「Kafka 設計」兩節。
 # =============================================================================
 
 # 專案名稱。容器、volume、網路名稱都以它為前綴：
@@ -194,6 +198,70 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # ---------- 管理 UI（選用，profile: ui）----------
+  # profiles：只有加上 --profile ui 才會啟動，平常 docker compose up 不會帶起來。
+  #   啟動：docker compose --profile ui up -d
+  #   停止：docker compose --profile ui stop kafbat-ui redisinsight
+  # 兩個 UI 都用 admin 帳號連線（看得到、改得了全部），所以 port 一樣只綁 127.0.0.1。
+  # 從其他電腦開要用 SSH tunnel（把 port 換成下面的 host port）。
+
+  kafbat-ui:
+    # Kafbat UI：provectus/kafka-ui 停止維護後的社群接手版本
+    image: ghcr.io/kafbat/kafka-ui:v1.2.0
+    profiles: ["ui"]
+    environment:
+      # KAFKA_CLUSTERS_<編號>_...：可設定多個 cluster，這裡只有一個（編號 0）
+      # UI 左側顯示的 cluster 名稱
+      KAFKA_CLUSTERS_0_NAME: kafka-redis-lab
+      # → start.sh 的 INTERNAL listener（UI 在 compose 網路內，所以用 kafka:9092 而不是 localhost:9094）
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      # _PROPERTIES_ 之後的部分會轉成 Kafka client 設定：
+      #   SECURITY_PROTOCOL → security.protocol，SASL_MECHANISM → sasl.mechanism，以此類推
+      # 與 start.sh 的 INTERNAL listener 一致：SASL 認證、不加密、SCRAM-SHA-512
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: SASL_PLAINTEXT
+      KAFKA_CLUSTERS_0_PROPERTIES_SASL_MECHANISM: SCRAM-SHA-512
+      # 用 admin 登入：才看得到全部 topic、consumer group、ACL。
+      # 若改用 producer / consumer 帳號，UI 只會看到 ACL 允許的部分（可拿來觀察 ACL 效果）。
+      KAFKA_CLUSTERS_0_PROPERTIES_SASL_JAAS_CONFIG: >-
+        org.apache.kafka.common.security.scram.ScramLoginModule required
+        username="admin" password="${KAFKA_ADMIN_PASSWORD:?請先執行 cp .env.example .env}";
+      # 關掉「在 UI 裡新增 / 修改 cluster 設定」，設定只來自這裡的環境變數
+      DYNAMIC_CONFIG_ENABLED: "false"
+    ports:
+      # UI 容器內聽 8080，與 web 面板撞號，所以 host 端預設改用 8081
+      - "127.0.0.1:${KAFBAT_HOST_PORT:-8081}:8080"
+    depends_on:
+      kafka-init:
+        # 等帳號、topic、ACL 都建好再啟動，一打開就看得到 orders topic
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  redisinsight:
+    # Redis 官方的 GUI（瀏覽 key、看 TTL、跑指令的 Workbench）
+    image: redis/redisinsight:latest
+    profiles: ["ui"]
+    environment:
+      # 預先登錄一個資料庫連線，打開 UI 就在清單裡，不用手動輸入。
+      # 注意：這些變數拿掉後重啟，預先登錄的連線也會一起被移除。
+      # redis 是服務名稱，6379 是容器內 port（不受 REDIS_HOST_PORT 影響）
+      RI_REDIS_HOST: redis
+      RI_REDIS_PORT: "6379"
+      RI_REDIS_ALIAS: kafka-redis-lab (admin)
+      # 用 admin：Insight 的 key 瀏覽器靠 SCAN、TYPE、INFO 等指令，
+      # app 帳號是白名單（沒有 SCAN），用 app 會連得上但列不出 key。
+      RI_REDIS_USERNAME: admin
+      RI_REDIS_PASSWORD: ${REDIS_ADMIN_PASSWORD:?請先執行 cp .env.example .env}
+    ports:
+      # Redis Insight 容器內固定聽 5540
+      - "127.0.0.1:${REDISINSIGHT_HOST_PORT:-5540}:5540"
+    volumes:
+      # UI 自己的設定（連線清單、Workbench 歷史），重啟後仍在
+      - redisinsight-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   redis:
     # alpine 版本：沒有 bash，所以 entrypoint.sh 只能用 POSIX sh
     image: redis:7.4-alpine
@@ -227,3 +295,5 @@ services:
 volumes:
   kafka-data:
   redis-data:
+  # Redis Insight 的設定（只有 --profile ui 時才會用到）
+  redisinsight-data:
