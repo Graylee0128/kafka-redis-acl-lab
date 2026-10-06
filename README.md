@@ -17,6 +17,7 @@ docker compose ps            # kafka / redis 為 healthy，kafka-init 為 exited
 ```
 
 - 權限申請面板：<http://localhost:8080>
+- 管理 UI（選用）：Kafbat UI、Redis Insight，見[第 5 節](#5-管理-ui選用)
 - port 被占用時，在 `.env` 改 `WEB_HOST_PORT`（預設 8080）或 `REDIS_HOST_PORT`（預設 6379）
 - 重設全部資料：`docker compose down -v`
 
@@ -174,6 +175,37 @@ docker compose exec redis redis-cli --no-auth-warning --user team-b --pass Examp
 ```
 
 安全設計：admin 憑證只注入 web 容器；內建帳號列為保留、已存在帳號不覆寫；帳號密碼格式白名單且不經 shell；回應與 log 不含密碼；建立失敗會回滾；Redis 帳號以 `ACL SAVE` 持久化，重啟後仍在。
+
+## 5. 管理 UI（選用）
+
+兩個 UI 放在 compose 的 `ui` profile，預設不啟動，不影響上面的流程：
+
+```bash
+docker compose --profile ui up -d                          # 啟動（核心服務沒起來時會一併啟動）
+docker compose --profile ui stop kafbat-ui redisinsight    # 只停 UI
+```
+
+| UI | 網址 | 連線 | 帳號 |
+|---|---|---|---|
+| Kafbat UI | <http://localhost:8081> | `kafka:9092`，SASL/SCRAM-SHA-512 | Kafka `admin` |
+| Redis Insight | <http://localhost:5540> | `redis:6379`，啟動時自動登錄連線 | Redis `admin` |
+
+- 兩者都用 admin 連線，可讀可改，port 與其他服務一樣只綁 `127.0.0.1`。
+- port 被占用時，在 `.env` 改 `KAFBAT_HOST_PORT`（預設 8081，避開面板的 8080）或 `REDISINSIGHT_HOST_PORT`（預設 5540）。
+- Redis Insight 第一次開啟會顯示使用條款，同意後才進得去。
+
+**Kafbat UI 可以看什麼**
+
+- Topics → `orders`：3 個 partition；Messages 分頁可看每筆事件的 key、partition、offset，相同訂單號的事件都在同一個 partition。
+- Consumers → `order-consumers`：兩個 member 各分到哪些 partition，以及 lag。
+- ACL：`producer` / `consumer` 與面板申請帳號的權限，對照第 2 節。
+
+**Redis Insight 可以看什麼**
+
+- Browser：篩選 `myapp:*`，`myapp:events:*` 是訂單最新狀態（string），`myapp:history:*` 是處理歷程（list），兩者都有 TTL。
+- Workbench：直接下指令，例如 `ACL LIST` 看全部帳號（含面板建立的）。
+
+Redis Insight 改用 `app` 帳號會連得上但列不出 key：Browser 需要 `SCAN`，而 `app` 的指令白名單沒有它。
 
 ## 已知限制
 
