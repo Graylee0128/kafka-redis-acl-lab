@@ -1,0 +1,28 @@
+flowchart LR
+    envfile[/".env<br/>（cp .env.example .env）<br/>密碼 · KAFKA_CLUSTER_ID"/]
+
+    subgraph infra["基礎設施"]
+        direction TB
+        kafka["<b>kafka</b><br/>entrypoint: infra/kafka/start.sh<br/>產生 server.properties → format（含 admin SCRAM）→ 啟動 broker"]
+        redis["<b>redis</b><br/>entrypoint: infra/redis/entrypoint.sh<br/>產生 users.acl → 啟動 redis-server"]
+    end
+
+    kafkainit["<b>kafka-init</b>（一次性）<br/>infra/kafka/init.sh<br/>建 producer / consumer 帳號 → topic orders ×3 → ACL<br/>restart: no"]
+
+    subgraph apps["應用程式（restart: unless-stopped）"]
+        direction TB
+        producer["<b>producer</b><br/>producer/src/index.js"]
+        consumer["<b>consumer ×2</b><br/>consumer/src/index.js<br/>deploy.replicas: 2"]
+        web["<b>web</b><br/>web/src/server.js<br/>127.0.0.1:8080"]
+    end
+
+    envfile -->|"${VAR:?} 缺值 → compose 直接報錯"| infra
+    envfile --> kafkainit
+    envfile --> apps
+
+    kafka ==>|"service_healthy<br/>healthcheck：admin 以 SCRAM 登入成功"| kafkainit
+    kafkainit ==>|"service_completed_successfully<br/>Exited (0)"| producer
+    kafkainit ==>|"service_completed_successfully"| consumer
+    kafkainit ==>|"service_completed_successfully"| web
+    redis ==>|"service_healthy<br/>healthcheck：admin ping → PONG"| consumer
+    redis ==>|"service_healthy"| web

@@ -1,0 +1,20 @@
+flowchart LR
+    env[/"docker-compose.yml<br/>environment<br/>KAFKA_* · PRODUCE_INTERVAL_MS · ACTIVE_ORDERS"/]
+
+    subgraph src["producer/src"]
+        direction LR
+        index["<b>index.js</b>（進入點）<br/>連 Kafka · 定時送出 · 優雅關閉"]
+        config["<b>config.js</b><br/>loadConfig(env)<br/>讀環境變數、驗證、freeze<br/>→ brokers · username · password<br/>topic · intervalMs · activeOrders"]
+        orders["<b>orders.js</b>（純函式）<br/>createOrderGenerator()<br/>訂單池 · seq 1→4"]
+    end
+
+    kafkajs(["kafkajs<br/>Kafka · Partitioners · logLevel"])
+    kafka[("Kafka<br/>topic orders")]
+
+    env -->|process.env| index
+    index -->|"① loadConfig()"| config
+    config -.->|"config"| index
+    index -->|"② createOrderGenerator({ activeOrders, runId })"| orders
+    orders -.->|"next() → event<br/>{ order_id, seq, status, amount, ts }"| index
+    index -->|"③ new Kafka() · producer()"| kafkajs
+    kafkajs -->|"send({ key: order_id, value: JSON })<br/>acks: -1 · maxInFlightRequests: 1"| kafka

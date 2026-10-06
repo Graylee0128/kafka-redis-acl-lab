@@ -1,0 +1,18 @@
+{
+  "name": "kafka-redis-producer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "模擬訂單事件，以 order_id 為 Message Key 送進 Kafka",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "kafkajs": "2.2.4"
+  }
+}

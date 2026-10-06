@@ -1,0 +1,33 @@
+flowchart LR
+    env[/"docker-compose.yml<br/>environment<br/>KAFKA_* · REDIS_* · KAFKA_GROUP_ID"/]
+    kafka[("Kafka<br/>topic orders")]
+
+    subgraph src["consumer/src"]
+        direction LR
+        index["<b>index.js</b>（進入點）<br/>加入 group · handleMessage · 優雅關閉"]
+        config["<b>config.js</b><br/>loadConfig(env, hostname)<br/>讀環境變數、驗證、freeze"]
+        event["<b>event.js</b>（純函式）<br/>parseEvent(message)<br/>classifySeq(lastSeq, seq)"]
+        store["<b>store.js</b><br/>createEventStore(redis)<br/>apply(event, meta)"]
+    end
+
+    kafkajs(["kafkajs<br/>Kafka · logLevel"])
+    noderedis(["redis（node-redis）<br/>createClient"])
+    redis[("Redis<br/>myapp:events:&lt;id&gt; STRING<br/>myapp:history:&lt;id&gt; LIST")]
+
+    env -->|"process.env + os.hostname()"| index
+    index -->|"① loadConfig()"| config
+    config -.->|"config"| index
+
+    kafka -->|"eachMessage<br/>{ partition, message }"| kafkajs
+    kafkajs --> index
+
+    index -->|"② parseEvent(message)"| event
+    event -.->|"{ ok, event } / { ok: false, reason }"| index
+    index -->|"③ store.apply(event, { consumerId, partition, offset })"| store
+    store -->|"classifySeq()"| event
+    event -.->|"in_order / gap / duplicate"| store
+    store -.->|"outcome → 決定記哪種 log"| index
+
+    index -->|"createClient()"| noderedis
+    store -->|"GET → SET EX · RPUSH · EXPIRE<br/>user: app"| noderedis
+    noderedis --> redis

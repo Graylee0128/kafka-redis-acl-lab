@@ -1,0 +1,28 @@
+flowchart LR
+    producer["<b>Producer</b>（container）<br/>產出模擬 JSON 訂單<br/>Message Key = order_id<br/>kafka user: producer · WRITE"]
+
+    subgraph kafka["Kafka Broker · SASL/SCRAM + ACL"]
+        direction TB
+        p0["Topic orders · Partition 0"]
+        p1["Topic orders · Partition 1"]
+        p2["Topic orders · Partition 2"]
+    end
+
+    subgraph group["Consumer Group: order-consumers"]
+        direction TB
+        c1["<b>Consumer #1</b>（container）<br/>kafka user: consumer · READ"]
+        c2["<b>Consumer #2</b>（container）<br/>kafka user: consumer · READ"]
+    end
+
+    redis[("<b>Redis</b> · ACL 啟用<br/>Key: myapp:events:&lt;id&gt;")]
+
+    producer -->|"hash(key) % 3"| p0
+    producer --> p1
+    producer --> p2
+
+    p0 --> c1
+    p1 --> c1
+    p2 --> c2
+
+    c1 -->|"redis user: app<br/>~myapp:* +set"| redis
+    c2 -->|"redis user: app"| redis

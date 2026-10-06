@@ -1,0 +1,22 @@
+/* 版面、表單、深色模式都交給 Pico CSS；這裡只補申請結果的狀態色 */
+
+main.container {
+  max-width: 760px;
+  padding-block: 2rem 4rem;
+}
+
+#result {
+  border-left: 4px solid var(--pico-muted-border-color);
+}
+
+#result.success {
+  border-left-color: var(--pico-ins-color);
+}
+
+#result.error {
+  border-left-color: var(--pico-del-color);
+}
+
+#result ul {
+  margin-bottom: 0;
+}

@@ -1,0 +1,42 @@
+flowchart LR
+    browser["<b>瀏覽器</b><br/>public/index.html + app.js<br/>fetch POST /api/access-requests"]
+    env[/"docker-compose.yml<br/>environment<br/>KAFKA_ADMIN_PASSWORD · REDIS_ADMIN_PASSWORD"/]
+
+    subgraph src["web/src"]
+        direction LR
+        server["<b>server.js</b>（進入點）<br/>路由 · 安全標頭 · 讀 body<br/>組裝 provisioners · 稽核 log"]
+        ratelimit["<b>rate-limit.js</b><br/>createRateLimiter()<br/>每 IP 每分鐘 10 次"]
+        validate["<b>validate.js</b>（純函式）<br/>validateRequest(body)<br/>帳號 / 密碼白名單 · 保留帳號"]
+        provision["<b>provision.js</b><br/>provisionAccess(value, provisioners)<br/>檢查重複 → 建立 → 失敗回滾<br/>created 201 · conflict 409 · 例外 500"]
+        kafkaadmin["<b>kafka-admin.js</b><br/>createKafkaProvisioner()<br/>userExists · createUser · removeUser"]
+        redisadmin["<b>redis-admin.js</b><br/>createRedisProvisioner()<br/>userExists · createUser · removeUser"]
+    end
+
+    kafkacli(["kafka-configs.sh<br/>（apache/kafka 映像內）<br/>SCRAM 憑證"])
+    kafkajs(["kafkajs admin<br/>createAcls · deleteAcls"])
+    noderedis(["redis（node-redis）<br/>sendCommand"])
+    kafka[("Kafka<br/>user: admin")]
+    redis[("Redis<br/>user: admin<br/>/data/users.acl")]
+
+    browser -->|"JSON { username, password, targets }"| server
+    env -->|process.env| server
+
+    server -->|"① allow(ip)"| ratelimit
+    ratelimit -.->|"true / false → 429"| server
+    server -->|"② validateRequest(body)"| validate
+    validate -.->|"{ ok, value } / { errors } → 400"| server
+    server -->|"③ provisionAccess()"| provision
+    provision -.->|"201 / 409 / 500"| server
+
+    server -.->|"建立時注入"| kafkaadmin
+    server -.->|"建立時注入"| redisadmin
+    provision -->|"provisioners.kafka"| kafkaadmin
+    provision -->|"provisioners.redis"| redisadmin
+
+    kafkaadmin -->|"execFile（不經 shell）"| kafkacli
+    kafkaadmin -->|"ACL：topic READ · DESCRIBE<br/>group PREFIXED &lt;帳號&gt;-"| kafkajs
+    kafkacli --> kafka
+    kafkajs --> kafka
+
+    redisadmin -->|"ACL GETUSER · SETUSER · SAVE · DELUSER"| noderedis
+    noderedis --> redis

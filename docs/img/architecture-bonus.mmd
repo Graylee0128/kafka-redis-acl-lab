@@ -1,0 +1,28 @@
+flowchart LR
+    user(["使用者瀏覽器"])
+
+    subgraph web["Web UI 服務（container）"]
+        direction TB
+        ui["<b>權限申請面板</b><br/>帳號 / 密碼 / 目標"]
+        api["<b>Backend API</b><br/>POST /api/access-requests<br/>唯一持有 admin 憑證"]
+        ui --> api
+    end
+
+    subgraph kafka["Kafka Broker"]
+        direction TB
+        scram["SCRAM 使用者憑證<br/>AlterUserScramCredentials"]
+        acl["ACL 規則<br/>CreateAcls"]
+        topic["Topic orders"]
+    end
+
+    redis[("<b>Redis</b><br/>ACL SETUSER")]
+
+    client["新申請帳號的 Client"]
+
+    user -->|"http://localhost:8080"| ui
+    api -->|"kafka admin"| scram
+    api -->|"kafka admin"| acl
+    api -->|"redis admin"| redis
+
+    client -.->|"以新帳號連線"| topic
+    client -.->|"以新帳號連線"| redis

@@ -1,0 +1,47 @@
+flowchart LR
+    %% ===== 加分題：權限申請面板 =====
+    user(["使用者瀏覽器"])
+
+    subgraph web["Web UI 服務（container）· :8080"]
+        direction TB
+        ui["<b>權限申請面板</b><br/>帳號 / 密碼 / 目標（Kafka or Redis）"]
+        api["<b>Backend API</b><br/>POST /api/access-requests<br/>唯一持有 admin 憑證（env 注入）"]
+        ui --> api
+    end
+
+    %% ===== 原題目：資料流 =====
+    producer["<b>Producer</b>（container）<br/>JSON 訂單 · Key = order_id<br/>kafka user: producer · WRITE"]
+
+    subgraph kafka["Kafka Broker（KRaft）· SASL/SCRAM + ACL"]
+        direction TB
+        meta["SCRAM 憑證 + ACL 規則<br/>（存在 KRaft metadata）"]
+        p0["Topic orders · P0"]
+        p1["Topic orders · P1"]
+        p2["Topic orders · P2"]
+    end
+
+    subgraph group["Consumer Group: order-consumers"]
+        direction TB
+        c1["<b>Consumer #1</b>（container）<br/>kafka user: consumer · READ"]
+        c2["<b>Consumer #2</b>（container）<br/>kafka user: consumer · READ"]
+    end
+
+    redis[("<b>Redis</b> · ACL 啟用<br/>Key: myapp:events:&lt;id&gt;<br/>users: admin / app / 動態新增")]
+
+    newclient["新申請帳號的 Client"]
+
+    producer -->|"hash(key) % 3"| p0
+    producer --> p1
+    producer --> p2
+    p0 --> c1
+    p1 --> c1
+    p2 --> c2
+    c1 -->|"redis user: app · ~myapp:*"| redis
+    c2 -->|"redis user: app"| redis
+
+    user -->|"http://localhost:8080"| ui
+    api -->|"kafka admin<br/>AlterUserScramCredentials<br/>CreateAcls"| meta
+    api -->|"redis admin<br/>ACL SETUSER"| redis
+
+    newclient -.->|"新帳號 · 最小權限"| p0
+    newclient -.->|"新帳號 · ~myapp:* 唯讀"| redis

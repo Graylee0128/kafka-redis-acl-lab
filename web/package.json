@@ -1,0 +1,20 @@
+{
+  "name": "kafka-redis-access-panel",
+  "version": "0.1.0",
+  "private": true,
+  "description": "權限申請面板：動態建立 Kafka SCRAM / Redis ACL 帳號（固定唯讀權限）",
+  "type": "module",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@picocss/pico": "2.1.1",
+    "kafkajs": "2.2.4",
+    "redis": "6.3.0"
+  }
+}

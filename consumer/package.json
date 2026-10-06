@@ -1,0 +1,19 @@
+{
+  "name": "kafka-redis-consumer",
+  "version": "0.1.0",
+  "private": true,
+  "description": "以 Consumer Group 讀取訂單事件並寫入 Redis（myapp: 前綴）",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "kafkajs": "2.2.4",
+    "redis": "6.3.0"
+  }
+}

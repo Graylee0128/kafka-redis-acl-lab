@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>權限申請面板</title>
+  <link rel="stylesheet" href="/pico.min.css">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="container">
+    <hgroup>
+      <h1>權限申請面板</h1>
+      <p>申請一組 Kafka / Redis 帳號。新帳號一律只取得以下固定的<strong>唯讀</strong>權限。</p>
+    </hgroup>
+
+    <div class="grid">
+      <article>
+        <header><strong>Kafka</strong></header>
+        <ul>
+          <li>Topic <code>orders</code>：READ、DESCRIBE</li>
+          <li>Consumer group：只能使用 <code>&lt;帳號&gt;-</code> 開頭的名稱</li>
+          <li>驗證機制：SASL/SCRAM-SHA-512</li>
+        </ul>
+      </article>
+      <article>
+        <header><strong>Redis</strong></header>
+        <ul>
+          <li>Key：只限 <code>myapp:*</code></li>
+          <li>指令：GET、EXISTS、TTL、TYPE、STRLEN、LRANGE、LLEN</li>
+        </ul>
+      </article>
+    </div>
+
+    <article>
+      <form id="request-form" novalidate>
+        <label>
+          帳號
+          <input name="username" autocomplete="off" required pattern="[a-z][a-z0-9_\-]{2,31}"
+                 placeholder="例如 team-a" aria-describedby="username-help">
+          <small id="username-help">3–32 字，小寫英文開頭，可用 a-z 0-9 _ -</small>
+        </label>
+        <label>
+          密碼
+          <input name="password" type="password" autocomplete="new-password" required
+                 pattern="[A-Za-z0-9]{12,64}" aria-describedby="password-help">
+          <small id="password-help">12–64 碼英數字</small>
+        </label>
+        <fieldset>
+          <legend>申請目標</legend>
+          <label><input type="checkbox" role="switch" name="targets" value="kafka" checked> Kafka</label>
+          <label><input type="checkbox" role="switch" name="targets" value="redis" checked> Redis</label>
+        </fieldset>
+        <button type="submit">送出申請</button>
+      </form>
+    </article>
+
+    <article id="result" role="status" aria-live="polite" hidden></article>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
