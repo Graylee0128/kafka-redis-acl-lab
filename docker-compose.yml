@@ -25,7 +25,7 @@
 # 檢視解析結果時用 docker compose config --services / --volumes；
 # 不要直接跑 docker compose config，它會把 .env 的密碼全部展開印出來。
 #
-# 相關說明：QA.md「讀懂執行狀態」與「Kafka 設計」兩節。
+# 相關說明：README.md「1. 啟動」（啟動順序）與「2. 帳號與 ACL 配置」。
 # =============================================================================
 
 # 專案名稱。容器、volume、網路名稱都以它為前綴：
@@ -53,7 +53,11 @@ services:
       KAFKA_CLUSTER_ID: ${KAFKA_CLUSTER_ID:?請先執行 cp .env.example .env}
       # admin 密碼：CONTROLLER 的 PLAIN、INTERNAL 的 SCRAM、format 時的 --add-scram 都用它
       KAFKA_ADMIN_PASSWORD: ${KAFKA_ADMIN_PASSWORD:?請先執行 cp .env.example .env}
-    # 沒有設定 restart（預設 "no"）：主機重開機後不會自動啟動，要手動 docker compose up -d。
+    # 主機重開機（Docker daemon 重啟）後自動啟動；手動 docker compose stop 停掉的則維持停止。
+    # 注意：開機時 Docker 會同時拉起所有 unless-stopped 的容器，不看 depends_on 的順序。
+    # producer / consumer 若比 kafka 先起來會連線失敗、exit(1)，再被重啟，kafka healthy 後就會連上。
+    # kafka-init 是 restart "no"，開機後不會重跑；帳號、topic、ACL 存在 kafka-data volume，不需要重跑。
+    restart: unless-stopped
     ports:
       # 格式「host IP:host port:容器 port」。只綁 127.0.0.1，只有本機連得到，區網其他電腦連不到。
       # 只 publish EXTERNAL（9094）；INTERNAL 9092 沒寫在這裡，host 完全連不到（容器之間不受影響）。
@@ -274,7 +278,8 @@ services:
       # redis-cli 會自動讀這個環境變數當密碼：healthcheck 與 docker compose exec redis redis-cli --user admin
       # 都不用在指令列帶 --pass，ps 也看不到密碼。
       REDISCLI_AUTH: ${REDIS_ADMIN_PASSWORD}   # 給 healthcheck 的 redis-cli 用，避免密碼出現在指令列
-    # 沒有設定 restart（預設 "no"）：主機重開機後不會自動啟動，要手動 docker compose up -d。
+    # 主機重開機後自動啟動（同 kafka）；ACL 檔與資料都在 redis-data volume，重啟後仍在。
+    restart: unless-stopped
     ports:
       # 只綁 127.0.0.1；host port 可用 .env 改，容器內固定 6379，容器之間仍用 redis:6379
       - "127.0.0.1:${REDIS_HOST_PORT:-6379}:6379"   # host 上 6379 被占用時，在 .env 改 REDIS_HOST_PORT
